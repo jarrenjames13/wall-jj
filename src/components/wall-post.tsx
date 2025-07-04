@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { useState, useEffect, useRef } from "react"
 import { Post, fetchPosts, createPost, deletePost, subscribeToNewPosts } from "@/lib/utils"
 import { ALLOWED_IMAGE_TYPES, ALLOWED_VIDEO_TYPES, MAX_FILE_SIZE } from "@/lib/supabase"
-import { ImageIcon, X, Trash2 } from "lucide-react"
+import { ImageIcon, X, Trash2, Upload } from "lucide-react"
 import Image from "next/image"
 
 export function WallPost() {
@@ -17,7 +17,9 @@ export function WallPost() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropZoneRef = useRef<HTMLDivElement>(null)
 
   // Load posts on mount
   useEffect(() => {
@@ -48,10 +50,7 @@ export function WallPost() {
     }
   }, [previewUrl])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const handleFile = (file: File) => {
     // Validate file type
     const isValidType = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES].includes(file.type)
     if (!isValidType) {
@@ -73,6 +72,41 @@ export function WallPost() {
     setPreviewUrl(newPreviewUrl)
     setSelectedFile(file)
     setError("")
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    handleFile(file)
+  }
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.currentTarget === dropZoneRef.current) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    handleFile(file)
   }
 
   const clearSelectedFile = () => {
@@ -138,7 +172,14 @@ export function WallPost() {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+        <div 
+          ref={dropZoneRef}
+          className={`border-2 ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-dashed border-gray-300'} rounded-lg p-4 transition-colors`}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
           <Input
             type="text"
             placeholder="Your name"
@@ -176,6 +217,12 @@ export function WallPost() {
               >
                 <ImageIcon className="w-5 h-5 text-blue-500" />
               </button>
+              {!selectedFile && (
+                <div className="text-sm text-gray-500 flex items-center gap-1">
+                  <Upload className="w-4 h-4" />
+                  Drag and drop files here
+                </div>
+              )}
             </div>
             <p className="text-gray-500 text-sm">
               {newPost.length}/280
