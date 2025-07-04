@@ -2,15 +2,17 @@
 
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { useState, useEffect, useRef } from "react"
-import { Post, fetchPosts, createPost, subscribeToNewPosts } from "@/lib/utils"
+import { Post, fetchPosts, createPost, deletePost, subscribeToNewPosts } from "@/lib/utils"
 import { ALLOWED_IMAGE_TYPES, ALLOWED_VIDEO_TYPES, MAX_FILE_SIZE } from "@/lib/supabase"
-import { ImageIcon, X } from "lucide-react"
+import { ImageIcon, X, Trash2 } from "lucide-react"
 import Image from "next/image"
 
 export function WallPost() {
   const [posts, setPosts] = useState<Post[]>([])
   const [newPost, setNewPost] = useState("")
+  const [uploaderName, setUploaderName] = useState("")
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -93,10 +95,14 @@ export function WallPost() {
       setError("Message is too long (maximum 280 characters)")
       return
     }
+    if (!uploaderName.trim()) {
+      setError("Please enter your name")
+      return
+    }
 
     setIsSubmitting(true)
     try {
-      const post = await createPost(newPost.trim(), selectedFile || undefined)
+      await createPost(newPost.trim(), uploaderName.trim(), selectedFile || undefined)
       // The real-time subscription will handle adding the post to the state
       setNewPost("")
       clearSelectedFile()
@@ -113,6 +119,16 @@ export function WallPost() {
     }
   }
 
+  const handleDelete = async (postId: string) => {
+    try {
+      await deletePost(postId)
+      setPosts(prevPosts => prevPosts.filter(post => post.id !== postId))
+    } catch (err) {
+      console.error('Error deleting post:', err)
+      setError("Failed to delete post. Please try again.")
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && e.metaKey) {
       handleSubmit()
@@ -123,6 +139,15 @@ export function WallPost() {
     <div className="space-y-4">
       <div className="space-y-2">
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+          <Input
+            type="text"
+            placeholder="Your name"
+            value={uploaderName}
+            onChange={(e) => setUploaderName(e.target.value)}
+            className="mb-2"
+            maxLength={50}
+            disabled={isSubmitting}
+          />
           <textarea
             className="w-full p-2 border-none focus:outline-none resize-none bg-transparent"
             placeholder="What's on your mind?"
@@ -198,7 +223,18 @@ export function WallPost() {
 
       {posts.map((post) => (
         <Card key={post.id} className="p-4">
-          <h3 className="font-bold mb-2">Anonymous User</h3>
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="font-bold">{post.uploaderName}</h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+              onClick={() => handleDelete(post.id)}
+              title="Delete post"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
           <p className="text-gray-700">{post.body}</p>
           {post.mediaUrl && (
             <div className="mt-4">

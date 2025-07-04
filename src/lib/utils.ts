@@ -12,6 +12,7 @@ export type Post = {
   timestamp: string
   mediaUrl?: string
   mediaType?: 'image' | 'video'
+  uploaderName: string
 }
 
 export async function fetchPosts(): Promise<Post[]> {
@@ -30,11 +31,12 @@ export async function fetchPosts(): Promise<Post[]> {
     body: post.body,
     timestamp: post.created_at,
     mediaUrl: post.media_url,
-    mediaType: post.media_type
+    mediaType: post.media_type,
+    uploaderName: post.uploader_name || 'Anonymous'
   }))
 }
 
-export async function createPost(body: string, file?: File): Promise<Post | null> {
+export async function createPost(body: string, uploaderName: string, file?: File): Promise<Post | null> {
   try {
     let mediaUrl: string | undefined
     let mediaType: 'image' | 'video' | undefined
@@ -56,7 +58,8 @@ export async function createPost(body: string, file?: File): Promise<Post | null
           body,
           media_url: mediaUrl,
           media_type: mediaType,
-          created_at: new Date().toISOString() // Explicitly set the timestamp
+          created_at: new Date().toISOString(),
+          uploader_name: uploaderName
         }
       ])
       .select()
@@ -76,11 +79,57 @@ export async function createPost(body: string, file?: File): Promise<Post | null
       body: data.body,
       timestamp: data.created_at,
       mediaUrl: data.media_url,
-      mediaType: data.media_type
+      mediaType: data.media_type,
+      uploaderName: data.uploader_name
     }
   } catch (error) {
     console.error('Error creating post:', error)
-    throw error // Propagate the error instead of returning null
+    throw error
+  }
+}
+
+export async function deletePost(postId: string): Promise<void> {
+  try {
+    // First get the post to check if it has media
+    const { data: post, error: fetchError } = await supabase
+      .from('posts')
+      .select('media_url')
+      .eq('id', postId)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching post for deletion:', fetchError)
+      throw fetchError
+    }
+
+    // If post has media, delete it from storage
+    if (post?.media_url) {
+      const mediaPath = new URL(post.media_url).pathname.split('/').pop()
+      if (mediaPath) {
+        const { error: storageError } = await supabase.storage
+          .from('posts-media')
+          .remove([mediaPath])
+
+        if (storageError) {
+          console.error('Error deleting media:', storageError)
+          // Continue with post deletion even if media deletion fails
+        }
+      }
+    }
+
+    // Delete the post from the database
+    const { error: deleteError } = await supabase
+      .from('posts')
+      .delete()
+      .eq('id', postId)
+
+    if (deleteError) {
+      console.error('Error deleting post:', deleteError)
+      throw deleteError
+    }
+  } catch (error) {
+    console.error('Error in deletePost:', error)
+    throw error
   }
 }
 
@@ -100,7 +149,8 @@ export function subscribeToNewPosts(callback: (post: Post) => void) {
           body: payload.new.body,
           timestamp: payload.new.created_at,
           mediaUrl: payload.new.media_url,
-          mediaType: payload.new.media_type
+          mediaType: payload.new.media_type,
+          uploaderName: payload.new.uploader_name || 'Anonymous'
         }
         callback(newPost)
       }
@@ -119,7 +169,7 @@ async function uploadMedia(file: File): Promise<string> {
     const fileName = `${timestamp}.${fileExt}`
 
     const { error: uploadError } = await supabase.storage
-      .from('posts-media') // Use the correct bucket name
+      .from('posts-media')
       .upload(fileName, file, {
         cacheControl: '3600',
         upsert: false
@@ -131,7 +181,7 @@ async function uploadMedia(file: File): Promise<string> {
     }
 
     const { data: { publicUrl } } = supabase.storage
-      .from('posts-media') // Use the correct bucket name
+      .from('posts-media')
       .getPublicUrl(fileName)
 
     return publicUrl
