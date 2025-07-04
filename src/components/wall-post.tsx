@@ -98,7 +98,7 @@ export function WallPost() {
     try {
       const post = await createPost(newPost.trim(), selectedFile || undefined)
       if (post) {
-        setPosts(prevPosts => [post, ...prevPosts])
+        // The real-time subscription will handle adding the post to the state
         setNewPost("")
         clearSelectedFile()
         setError("")
