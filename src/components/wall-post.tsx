@@ -97,17 +97,17 @@ export function WallPost() {
     setIsSubmitting(true)
     try {
       const post = await createPost(newPost.trim(), selectedFile || undefined)
-      if (post) {
-        // The real-time subscription will handle adding the post to the state
-        setNewPost("")
-        clearSelectedFile()
-        setError("")
-      } else {
-        setError("Failed to create post. Please try again.")
-      }
+      // The real-time subscription will handle adding the post to the state
+      setNewPost("")
+      clearSelectedFile()
+      setError("")
     } catch (err) {
-      setError("An error occurred. Please try again.")
-      console.error(err)
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError("An error occurred while creating the post. Please try again.")
+      }
+      console.error('Error creating post:', err)
     } finally {
       setIsSubmitting(false)
     }

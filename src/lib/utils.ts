@@ -40,8 +40,13 @@ export async function createPost(body: string, file?: File): Promise<Post | null
     let mediaType: 'image' | 'video' | undefined
 
     if (file) {
-      mediaUrl = await uploadMedia(file)
-      mediaType = file.type.startsWith('image/') ? 'image' : 'video'
+      try {
+        mediaUrl = await uploadMedia(file)
+        mediaType = file.type.startsWith('image/') ? 'image' : 'video'
+      } catch (uploadError) {
+        console.error('Error uploading media:', uploadError)
+        throw uploadError
+      }
     }
 
     const { data, error } = await supabase
@@ -50,13 +55,21 @@ export async function createPost(body: string, file?: File): Promise<Post | null
         {
           body,
           media_url: mediaUrl,
-          media_type: mediaType
+          media_type: mediaType,
+          created_at: new Date().toISOString() // Explicitly set the timestamp
         }
       ])
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error inserting post:', error)
+      throw error
+    }
+
+    if (!data) {
+      throw new Error('No data returned from post creation')
+    }
 
     return {
       id: data.id,
@@ -67,7 +80,7 @@ export async function createPost(body: string, file?: File): Promise<Post | null
     }
   } catch (error) {
     console.error('Error creating post:', error)
-    return null
+    throw error // Propagate the error instead of returning null
   }
 }
 
@@ -100,21 +113,30 @@ export function subscribeToNewPosts(callback: (post: Post) => void) {
 }
 
 async function uploadMedia(file: File): Promise<string> {
-  const timestamp = new Date().getTime()
-  const fileExt = file.name.split('.').pop()
-  const fileName = `${timestamp}.${fileExt}`
+  try {
+    const timestamp = new Date().getTime()
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${timestamp}.${fileExt}`
 
-  const { error } = await supabase.storage
-    .from('media')
-    .upload(fileName, file)
+    const { error: uploadError } = await supabase.storage
+      .from('posts-media') // Use the correct bucket name
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
 
-  if (error) {
+    if (uploadError) {
+      console.error('Error uploading file:', uploadError)
+      throw uploadError
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('posts-media') // Use the correct bucket name
+      .getPublicUrl(fileName)
+
+    return publicUrl
+  } catch (error) {
+    console.error('Upload media error:', error)
     throw error
   }
-
-  const { data: { publicUrl } } = supabase.storage
-    .from('media')
-    .getPublicUrl(fileName)
-
-  return publicUrl
 }

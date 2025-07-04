@@ -28,21 +28,32 @@ export const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
 // Upload media file to Supabase storage
 export const uploadMedia = async (file: File) => {
-  const timestamp = new Date().getTime()
-  const fileExt = file.name.split('.').pop()
-  const fileName = `${timestamp}.${fileExt}`
-  const { error } = await supabase.storage
-    .from('media')
-    .upload(fileName, file)
+  try {
+    // Now try to upload the file
+    const timestamp = new Date().getTime()
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${timestamp}.${fileExt}`
+    
+    const { error: uploadError } = await supabase.storage
+      .from('posts-media')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false
+      })
 
-  if (error) {
+    if (uploadError) {
+      console.error('Error uploading file:', uploadError)
+      throw uploadError
+    }
+
+    // Get public URL for the uploaded file
+    const { data: { publicUrl } } = supabase.storage
+      .from('posts-media')
+      .getPublicUrl(fileName)
+
+    return publicUrl
+  } catch (error) {
+    console.error('Upload media error:', error)
     throw error
   }
-
-  // Get public URL for the uploaded file
-  const { data: { publicUrl } } = supabase.storage
-    .from('media')
-    .getPublicUrl(fileName)
-
-  return publicUrl
 } 
